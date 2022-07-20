@@ -1,0 +1,592 @@
+---
+output:
+  html_document: default
+  word_document: default
+---
+### Import dataset and library
+
+```{r, message=FALSE}
+df <- read.csv("survey.csv",stringsAsFactors=T)
+library("tidyverse")
+library("gridExtra")
+```
+
+### Str & Summary
+```{r}
+df %>% dim
+```
+
+```{r}
+# summary
+df %>% summary
+```
+
+
+```{r}
+df <- df %>% select(treatment, Age, Gender, family_history, no_employees, tech_company) 
+
+df %>% str
+```
+
+
+# Inspect and Transform Individual Variables
+
+###  Binary Vairables
+
+For treatment, family_history, no_employees, and tech_company variables, the pattern and type are so clean that they do not need to inspect and transform. Nevertheless, I still need to explain basic information of them one by one.
+
+#### **Treatment**
+
+Whether employees have sought mental health care?
+
+```{r}
+df$treatment %>% table
+```
+
+
+#### **Family_History**
+
+Whether employees seeking mental health consultation is affected by family history.
+
+```{r}
+df$family_history %>% table
+```
+
+
+#### **Tech_company**
+
+```{r}
+df$tech_company %>% table
+```
+
+### Categorical Variables
+
+#### **No_employees**
+
+The number of employees in a tech company can help me to answer some questions: Does the size of the company affect the mental health of employees? If the number of employees is large, does it mean that the competition is stronger than small companies and employees are more likely to have mental health problems?
+
+```{r, fig.height = 3, fig.width = 9}
+# ordered no_employees level
+level_order <- factor(df$no_employees, levels = c("1-25","26-100","100-500", "500-1000","More than 1000"))
+
+# view the company distribution based on company size
+df %>% ggplot(aes(x=level_order))+
+  geom_bar(fill = "pink") + ggtitle("ordered company size")
+```
+
+1. This variable is categorical; there are 5 groups. 
+
+2. Each group represents the number range of employees in a company or organization. 
+
+3. Based on the summary, there is no missing value under this variable.
+
+4. The bar chart can make easily to compare amoung those groups. I can know that small companies with fewer than 100 people and large companies with more than 1000 people account for a relatively high proportion. Also, most groups show that the number of employees who sought mental health care is higher than of employees who did not seek it.
+
+5. **BUT** it is hard to see the difference between 26-100 and 6-25, so if I want to compare them, table may be a good choice.
+
+```{r}
+# view the specific number of company in each size range 
+df$no_employees %>% table
+```
+
+#### **Gender**
+
+We want to know whether the majority of employees seeking mental health care are male or female.
+
+```{r}
+# Gender categories barplot
+G1 <- df %>% ggplot(aes(x=Gender)) +
+  geom_bar() + ggtitle("Categories of Gender")
+
+```  
+
+
+```{r}
+# Create the list of three categories
+Male <- c("Male")
+Female <- c("Female")
+Others <-c ("Others")
+
+# Categorize genders
+df$Gender <- sapply(
+  as.vector(df$Gender),
+  function(x) if(x %in% Male) "Male" else x ) 
+
+df$Gender <- sapply(
+  as.vector(df$Gender),
+  function(x) if(x %in% Female) "Female" else x ) 
+
+df$Gender <- sapply(
+  as.vector(df$Gender),
+  function(x) if(x %in% Others) "Others" else x ) 
+df$Gender <- as.factor(df$Gender)
+
+# Verify the result
+df$Gender %>% table
+```
+
+We have already organized Age into three groups, but We also want to do some preparation for the following step: like the percentage of each gender group, comparison among three gender groups.
+
+```{r,fig.height =3, fig.width= 9}
+# Create the relative frequency table of gender
+table(df$Gender)/length(df$Gender)
+
+# Group by Gender and count each group
+gender_diversity <- df %>%
+  group_by(Gender) %>%
+  dplyr::summarize(count = n())
+gender_diversity
+
+# Visualize the number of subjects in each gender type  
+G2 <- ggplot(gender_diversity, aes(x = Gender, y = count, fill = Gender)) +  
+  geom_bar(stat = "identity", alpha = 0.5) +
+  xlab("Gender Diversity") + 
+  ylab("Number of People") + 
+  ggtitle("Comparing Gender Diversity")
+
+grid.arrange(G1, G2, nrow = 1)
+```
+
+After transformed, the variable "```gender```" can be used to do some comparisons, which can help me to answer the goal.
+
+### Continuous Variable
+#### **Age**
+
+We are planning to look at the frequency distribution of age groups for seeking mental health care in the tech workplace. Which group has the highest frequency? 
+
+```{r}
+#Age distribution
+g1 <- df %>% ggplot(aes(x=Age)) +
+  geom_histogram() + ggtitle("Distribution of Age")
+```
+
+Based on the summary and histogram, the age variable includes incorrect values like the min_age is negative, and the max-age is too huge, so I think there are some outliers.
+
+I decided to perform the following transformations to Age variable:
+
+  * The variable "```Age```" is continuous, so I used the median to replace negative values and outliers.
+  
+  * Inspecting distribution of Age
+  
+  * For the convenience of the following steps, I classified the age groups.
+  
+  * Inspecting the visualization of the number of employees in each age group.
+
+```{r,fig.height =3, fig.width= 9}  
+# Replacing negative values and outliers with median
+df$Age[which(df$Age<0)]<- median(df$Age)
+df$Age[which(df$Age>100)]<- median(df$Age)
+Age1 <- df$Age
+
+# Summary Age
+summary(df$Age)
+
+# Histogram of Age
+g2 <- ggplot(df,aes(x=Age))+geom_histogram(aes(y=..density..), fill="pink")+geom_density(col="#3438BD",alpha = 0.5)+labs(x="Age",title="Distribution of Transformed Age")
+
+# Age categorization#
+df$Age<-cut(df$Age, breaks = c(0, 16, 34, 60, 75), labels = c('Fresh', 'Junior', 'Senior', 'Super'))
+
+# Verify Age group
+df$Age %>% table
+
+# Group by Age Group and count each group
+age_group <- df %>%
+  group_by(Age) %>%
+  dplyr::summarize(count = n())
+age_group
+
+# Visualize the number of subjects in each Age Group  
+g3 <- ggplot(age_group, aes(x = Age, y = count, fill = Age)) +  
+  geom_bar(stat = "identity", alpha = 0.5) +
+  xlab("Age Group") + 
+  ylab("Number of People") + 
+  ggtitle("Comparing Age Group")
+
+grid.arrange(g1, g2, g3, nrow = 1)
+```
+
+We can see that the histogram of transformed age is better than before. 
+
+### Summary
+
+  1. * There are no any change on target variable "```treatment```" and predictor "```family_history```", "```no_employees```", "```tech_company```".
+  
+  2.  * Missing values and outliers of variable ```Age``` were replaced by the median to keep the data integrity.
+  
+  3. * The predictor ```gender``` consolidated same gender.
+  
+```{r}
+# Update Summary
+summary(df)
+```
+
+# Inspection and Transform Multivariate Relationships
+
+In this part, I am planning to focus on the relationship between variables.
+
+### Target ~ Predictor Relationship
+
+#### **Treatment vs Tech-company**
+
+```{r}
+# Comparing tech_company treatment ratio
+df %>% ggplot(aes(x=tech_company, fill = (treatment))) +
+  geom_bar(position = "fill") + ggtitle("Tech_company Treatment Ratio")
+
+```
+
+Although the main target of the survey is the technical field, there are still some companies in the data that belong to the non-technical field. But it can be seen from the data whether the company belongs to the technical field or not, mental health is a big problem. However, from the details, it can be found that the number of companies in the technology field seeking mental health treatment is slightly lower than that without seeking mental health. But the non-technical field is the opposite. I can temporarily think that companies in the field of technology pay more attention to mental health problems.
+
+```{r}
+# Filter a dataset only focusing on tech_company
+Tech <- df %>% select(treatment, Age, Gender, family_history, no_employees, tech_company) %>% filter(tech_company == "Yes")
+summary(Tech)
+```
+
+
+Since I pay more attention on tech industry, I filtered a new dataset only including the tech industry. And next, I also make two graphs for each variable to guarantee all data can represent tech industry.
+
+#### **Treatment vs Age**
+
+```{r,  fig.height = 3, fig.width = 9}
+# Density of Age
+A1 <- df %>% ggplot(aes(x=Age1, fill = factor(treatment))) +
+  geom_density(alpha = 0.5) + ggtitle("Distribution of Age")
+
+# Comparing treatment ratio in Age groups
+A2 <- df %>% ggplot(aes(x=Age, fill = (treatment))) +
+  geom_bar(position = "fill") + ggtitle("Treatment Ratio in different Age Groups")
+
+# Comparing treatment ratio in Age groups focusing on tech field
+A3 <- Tech %>% ggplot(aes(x=Age, fill = (treatment))) +
+  geom_bar(position = "fill") + ggtitle("Treatment Ratio in different Age Groups on tech field")
+  
+  
+grid.arrange(A1, A2, A3, nrow = 1)
+```
+
+
+
+```Age1``` includes all age data without missing value and outliers but no cut into groups. ```Age``` is a categorical data because the data were split into different age groups. The second barplot represents relationship between treatment and age for entire data, and the third barplot represents that relationship for tech field data. Because the distribution status of total data chart and the bar chart of the technology industry are the same, my analysis focuses on the total data:
+
+Based on the distribution of Age, there is no vast distinguish between the frequency of which employees have accepted mental health treatment and the frequency of which employees without mental health treatment before. The frequencies are almost the same excepting the Junior age group. The Junior age group occupied almost 50% of employees. This distribution is enough to say that nearly half of employees in any age group have received mental health treatment. This is not good news.
+
+The categorical barplot also supports my statement. Additionally, I found that, for the senior age group, the mental health issue of employees is serious because the number of people who accepted mental health treatment is higher than of people with untreated. 
+
+#### **Treatment vs Gender**
+
+```{r,  fig.height = 3, fig.width = 9}
+
+# Comparing treatment ratio in Gender groups
+g1 <- df %>% ggplot(aes(x=Gender, fill = (treatment))) +
+  geom_bar(position = "fill") + ggtitle("Treatment Ratio (gender)")
+
+# Comparing treatment ratio in Gender groups focusing on tech industry
+g2 <- Tech %>% ggplot(aes(x=Gender, fill = (treatment))) +
+  geom_bar(position = "fill") + ggtitle("Treatment Ratio (gender) focusing on tech industry")
+
+grid.arrange(g1, g2, nrow =1)
+```
+
+It didn't come as a surprise that the number of males is higher than females in the workplace, especially in the tech field.
+
+Also, it is the fact that men's ability to resist pressure is higher than women's. The plot supports this fact. Although the count of the male is higher than female, the number of male employees with treatment is less than male employees without treatment. However, for female, twice as many people have sought mental health care as have not, which illustrates that women's work and psychological pressure is significantly higher than men's. 
+
+Additionally, although the percentage of Others is so low that it can be ignored, it still deserves to dig out some new insights. For example, such a small proportion can show a significant difference in the count of treatments, indicating that for the Others population, mental health problems are more serious.
+
+#### **Treatment vs Family_history**
+
+```{r,  fig.height = 3, fig.width = 9}
+# View Family_history ratio
+f1 <- df %>% ggplot(aes(x=family_history)) +
+  geom_bar(fill = "pink")
+
+# Comparing Family_history treatment ratio
+f2 <- df %>% ggplot(aes(x=family_history, fill = (treatment))) +
+  geom_bar(position = "fill") + ggtitle("Family_history Treatment Ratio")
+
+# Comparing Family_history treatment ratio focusing on tech industy
+f3 <- Tech %>% ggplot(aes(x=family_history, fill = (treatment))) +
+  geom_bar(position = "fill") + ggtitle("Family_history Treatment Ratio (Tech)")
+
+grid.arrange(f1, f2, f3, nrow = 1)
+```
+
+Sixty percent of employees do not have family history relating to mental health care, but I think 40 percent means mental health problems are common in this society, which should be attached properly. 
+
+The comparison plot shows that employees with family therapy history are significantly higher than those without a family history. This is expected, it is a fact that people with family therapy history pay more attention to mental health problems because if family members have experienced the negative pressure brought by mental health, their other family members are more aware of mental health. Even if there is some pressure they can bear, they may choose to relieve the stress through mental health treatment.
+
+#### **Treatment vs Number of Employees**
+
+```{r,fig.height = 3, fig.width = 9}
+# ordered no_employees level
+level_order1 <- factor(Tech$no_employees, levels = c("1-5","6-25","26-100","100-500", "500-1000","More than 1000"))
+# Comparing no_employees treatment ratio
+n1 <- df %>% ggplot(aes(x=level_order, fill = (treatment))) +
+  geom_bar(position = "fill") + ggtitle("No_employees Treatment Ratio")
+
+# # Comparing no_employees treatment ratio focusing on tech industry
+n2 <- Tech %>% ggplot(aes(x=level_order1, fill = (treatment))) +
+  geom_bar(position = "fill") + ggtitle("No_employees Treatment Ratio(tech)")
+
+grid.arrange(n1, n2, nrow = 1)
+```
+
+This data is different from my cognition. In my opinion, the larger the number of employees in the tech company, the more fierce the competition, so it means that the number of people seeking psychological stress relief will increase. But data show that the number of people seeking mental health treatment has little to do with the size of the company, excepting 500-1000 and 6-25. Due to sparse data for 500-1000, it has little persuasion. For 6-25, it matches my logic.
+
+After consideration, I think the reason why large-scale companies do not increase the number of employees in mental health treatment is that large-scale companies pay more attention to mental health. Companies set up psychological counseling for employees to alleviate the pressure of employees.
+
+
+### Check for multicollinear predictors
+
+Because there is only one continuous variable, we do not need to check for multicollinear predictors.
+
+### Summary
+
+  * From the graphs, we can intuitively see the relationship between each predictor and target:
+  
+    + ```Age```: The proportion of senior people seeking psychological consultation is the most. 
+    
+    + ```Gender```: Female employees' mental health in technology industry should be paid more attention.
+    
+    + ```Family_history```:  Employees with family history of mental health are more likely to seek mental health care.
+    
+    + ```no_employees```: It is impossible to draw a specific conclusion from the scale of the company.
+  
+  * From my personal point of view, graphs reflected the relationship between predicor and target, but I prefer to build a model to see which variables have a direct impact on mental health treatment.
+  
+# Modeling
+
+Due to my topic focuses on the tech field, I have already filtered Tech companies at the last assignment. I used logistic regression to predict the treatment of employees who are working in the tech field, so the dataset I used only includes tech companies with relevant information. Based on the tech field data summary, We can know that almost 50% of employees have sought mental health treatment, which means almost half of them meting mental issues before.
+
+```{r}
+summary(Tech)
+```
+
+For my baseline logistic model, I pay attention to four predictors I selected, which are primary elements relating to the mental health treatment.
+
+```{r}
+# Fit logistic model to full data
+lm <- glm(treatment ~ Age + Gender + no_employees + family_history, data = Tech, family = "binomial")
+summary(lm)
+```
+
+Things to notice:
+
+  + According to the summary of the model, we can see that only two critical elements which can affect the treatment that I expected. Those are gender and famly_hisotry since those p-values are smaller than 0.05.
+  
+  + The model has converted the predictor "Gender" into "Gendermale" and "GenderOthers": this means that the baseline is the "female" level picking from the model automatically and then a dummy variable is defined for "male" to evaluate the effect of being male relative to female. Obviously, the number of females who have sought mental health treatment is higher than males.
+  
+  + The model has converted the predictor "family_history" into "family_historyYes": this means that the baseline is "Without family history" Level that the model picked automatically and then defined a dummy variable for "family_historyYes" to evaluate the effect of family_history.
+  
+# Interpreting coefficients
+
+I plan to see log-odds and odds ratios in action. 
+
+First, I will look at the raw logistic regression coefficients from the model, which are the log-odds:
+
+```{r}
+# Raw logistic regression coefficients
+lm %>% coefficients %>% round(3)
+```
+
+Second, I will look at the odds ratios by exponentiating the log-odds:
+
+```{r}
+lm %>% coefficients %>% exp %>% round(3)
+```
+
+**Here is my interpreation:**
+
+There are two main effects which are gendermale and family_history,reporting by percent decreasing or increasing in the odds of treatment. At the same time, I do not interpret the intercept.
+
+  + **Age**, **GenderOthers**, **no_employees** : Not significant.
+  
+  + **Gendermale** : 100*(1-0.407)=59.3%. According to the calculation outcome, the odd of male with treatment is 58.8% lower than female, which is the direction we expect since, in the tech industry, men are more competitive than women. At the same time, men's ability to resist pressure is higher than women's, and women's family social responsibility brings more pressure than men. To sum up, it is reasonable that the proportion of men seeking mental health treatment is lower than that of women.
+  
+  + **Family_historyYes** : Employees with family mental health history are 5.319 times more likely to receive mental health treatment than employees without family history. This result shocked me that the effect of family history is such serious.
+  
+# Evaluating predictive performance
+
+For evaluating predcitive performance, I need to split the dataset into two subsets:one is train dataset, another one is test dataset. I will use train dataset to train the model, and then use test dataset to inspect the accuracy of the model.
+
+### **Train/test split**
+
+I split the dataset with an 80:20 split:
+
+```{r}
+# Randomly select train/test split indices with 80% training size
+n <- nrow(Tech)
+train_ind <- sample(seq_len(n), size = floor(0.8*n))
+
+# Split training/testing sets
+Tech_train <- Tech[train_ind, ]
+Tech_test <- Tech[-train_ind, ]
+
+# Define function for feature enginerring pipeline
+transformations <- function(Tech) {
+   # Gender
+   # Create the list of three categories
+Male <- c("Male")
+Female <- c("Female")
+Others <-c ("Others")
+
+# Categorize genders
+Tech$Gender <- sapply(
+  as.vector(Tech$Gender),
+  function(x) if(x %in% Male) "Male" else x ) 
+
+Tech$Gender <- sapply(
+  as.vector(Tech$Gender),
+  function(x) if(x %in% Female) "Female" else x ) 
+
+Tech$Gender <- sapply(
+  as.vector(Tech$Gender),
+  function(x) if(x %in% Others) "Others" else x ) 
+
+# Age
+# Replacing negative values and outliers with median
+Tech$Age <- as.numeric(Tech$Age)
+Tech$Age[which(Tech$Age<0)]<- median(Tech$Age)
+Tech$Age[which(Tech$Age>100)]<- median(Tech$Age)
+
+# Summary Age
+summary(Tech$Age)
+
+# Age categorization#
+Tech$Age1 <- cut(Tech$Age, breaks = c(0, 16, 34, 60, 75), labels = c('Fresh', 'Junior', 'Senior', 'Super'))
+
+# Verify Age group
+Tech$Age1 %>% table
+
+# Return the transformed dataframe
+return(Tech)
+}
+# Apply feature engineering to each subset
+Tech_train <- Tech_train %>% transformations
+Tech_test <- Tech_test %>% transformations
+
+# Checking train data
+Tech_train %>% head(2)
+```
+
+```{r}
+# checking test data
+Tech_test %>% head(2)
+```
+
+**Notice**: I apply the transformations separately for the training and test sets, so I defined function for feature engineering pipeline.
+
+### Fit and Predict
+
+I will use the training set to re-train the logistical regression model and use the trained models to make predictions on the train and test sets.
+
+```{r}
+# Train model
+lm_train <- glm(treatment ~ Age + Gender + family_history + no_employees, data = Tech_train, family = "binomial")
+
+# Predict on training set
+Tech_train$predict_probs <- predict(lm_train, Tech_train, type = "response")
+Tech_train$predict <- ifelse(Tech_train$predict_probs < 0.5, "No", "Yes")
+
+# Predict on test set
+Tech_test$predict_probs <- predict(lm_train, Tech_test, type = "response")
+Tech_test$predict <- ifelse(Tech_test$predict_probs < 0.5, "No", "Yes")
+```
+
+Above, I have model predictions on the train set(within-sample predictions) and test set(out-of-sample predictions). Next, it's time to evaluate the predictions.
+
+### Evaluation metrics
+
+There are three main confusion matrices and key metrics which are accuracy, precision, and recall). I will show them one by one:
+
+```{r}
+# Confusion matrix - training data
+cm_train <- table(Tech_train$treatment, Tech_train$predict, dnn = c("real", "predict"))
+cm_train
+```
+
+```{r}
+paste('Accuracy:', round(( cm_train['Yes','Yes'] + cm_train['No','No'] ) / sum(cm_train),2))
+```
+
+```{r}
+paste('Precision:', round(cm_train['Yes','Yes'] / sum(cm_train['Yes',]),2))
+```
+
+```{r}
+paste('Recall:', round(cm_train['Yes','Yes'] / sum(cm_train[,'Yes']),2))
+```
+
+```{r}
+# Confusion matrix ~ testing data
+cm_test <- table(Tech_test$treatment, Tech_test$predict, dnn = c("real", "predict"))
+cm_test
+```
+
+```{r}
+paste('Accuracy:', round(( cm_test['Yes','Yes'] + cm_test['No','No'] ) / sum(cm_test),2))
+```
+
+```{r}
+paste('Precision:', round(cm_test['Yes','Yes'] / sum(cm_test['Yes',]),2))
+```
+
+```{r}
+paste('Recall:', round(cm_test['Yes','Yes'] / sum(cm_test[,'Yes']),2))
+```
+
+Above results interpretation as follows:
+
+  + Outcomes can illustrate that there is no overfitting because those metrics can be comparable.
+  
+  + **Accuracy**: 71% mental health treatment predictions on the test dataset are correct.
+  
+  + **Precision**:  When the model predicted the accuracy of treatment, the accuracy was 66%.
+  
+  + **Recall**: when the model predict treatment, there are 72% correct probability of the time.
+
+# Interpretations
+
+Based on model results, gender and family history are important factors in mental health care, which can answer the goal. I will illustrate my personal opinions to interpret the question:
+
+#### **The importance of mental health problems in technology industry**
+  
+  + In the technology industry, mental health problems caused by high-pressure working conditions have attracted significant attention to the industry. Mental health is often (wrongly) seen as a shameful personal defect, so most people are reluctant to admit that they have something to do with it. There are also many misunderstandings about the word "mental illness", such as "schizophrenia". At the same time, due to the incomplete popularization of mental health, many employees who need mental health counseling cannot be understood when communicating with others. Drugs cannot alleviate the resulting pain. Therefore, mental health problems in the working environment should be highly valued, especially in the technology industry. Hence, who needs mental health treatment more is the fundamental factor to solve the mental health problems in the technology industry. That is why I focus on this data.
+  
+#### **Gender side**
+  
+ + In the technology industry, it is an indisputable fact that there are more male employees than female employees. The huge gap between males and females leads to the higher competitive pressure of women than men. At the same time, females have more family responsibilities than males. As a woman, she is not only an employee but also a mother. They should not only take care of the work but also the trivial matters in the family, which will lead to females' mental pressure higher than males'. Therefore, women need more mental health treatment.
+    
+ + Males are more rational, and females are more emotional, so females are more sensitive to mental health problems. In other words, females are more concerned about mental health.
+    
+ + There is more pressure on females' promotion space in the field of technology. In the process of promotion, there will be differences in communication and thinking modes between males and females. Hence women have more psychological pressure.
+    
+ + The working environment also affects females' mental health. First of all, the working environment is a little hard. It is not about the external facilities, but the "rude" oral communication between males of science and technology, or the spread of some taste oriented culture. In many cases, this culture ignores females' feelings. Therefore, it can be explained that females' mental health needs to be dredged in such an environment.
+    
+ + Also, females may feel very lonely in the technology industry because women are scarce in the industry.
+    
+#### **Family history**
+    
+ + First of all, as I stated above, seeking mental health care does not mean having mental health disorders. Many employees seek mental health care to relieve the pressure of work or life. For employees with family history, they may pay more attention to mental health problems and relieve psychological pressure at any time to prevent mental illness.
+    
+ + Secondly, families with a family history of mental health may have a depressive family atmosphere. The fact is that the workload of the technology industry is relatively large. If the family atmosphere is also depressed, the pressure at work cannot be relieved, so employees are more likely to have mental health problems.
+    
+#### **How to solve it?**
+    
+ + The industry should seriously consider what factors lead to females' mental health problems and how to solve them. Secondly, for employees with a family history of mental health, the company should pay more attention to psychological counseling. Finally, the technology industry attaches great importance to the mental health of employees. The company needs to establish a specific mental health counseling department and sincerely care about the mental health problems of employees: for example, regular psychological counseling, organizing group building activities and establishing a correct concept of mental health problems. Let every employee talk about mental health as a normal and no longer ashamed of it.
+    
+# Summary & Conclusion
+
+In the process of data analysis, I built an analysis framework to get the relationship between predictor and target. Furthermore, around these relationships to think and conclude mental health problems:
+
+  * Transforming variables has brought me many gains. The transformation processes of age, gender, and no employees are complex. Age needs to consider outliers, missing values, and histogram distribution. Gender needs to be redefined and grouped. No_employees needs to adjust the order. These codings are the difficulties for me to overcome, but solving these problems made the variables clear and brought me a sense of achievement.
+  
+  * In the technology industry, gender and family history of mental health are closely related to mental health treatment.       + The mental health problems of female employees should be paid more attention. 
+  
+    + Employees with a family history of mental health should be given a high degree of care and regular psychological treatment.
+    
+    + All in all, the company needs to correctly understand the importance of employees' mental health problems and establish a mental health treatment department.
+  
+  * If I have more time, I hope to improve the industry's awareness of employees' mental health problems. Serious mental health problems not only affect the quality of life, but also reduce work efficiency, and even have more severe consequences. Not only does the company need to establish a mental health system, but I also suggest improving employees' awareness of mental health treatment and changing the definition of solidified mental health diseases. I hope that employees can think that mental health problems are as common as daily physical examination, so many problems can be improved from the industry, even from society.
